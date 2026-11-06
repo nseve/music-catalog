@@ -44,3 +44,6 @@ migrate-force:
 		exit 1; \
 	fi; \
 	$(MIGRATE) -path //migrations -database "$(DB_URL)" force $(version)
+
+app-run:
+	@go run ./cmd/app/main.go
