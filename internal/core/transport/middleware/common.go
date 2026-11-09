@@ -34,6 +34,7 @@ func Logger(log *slog.Logger) Middleware {
 			l := log.With(
 				slog.String("request_id", r.Header.Get(requestIDHeader)),
 				slog.String("url", r.URL.String()),
+				slog.String("method", r.Method),
 			)
 
 			ctx := logger.ToContext(r.Context(), l)
@@ -68,7 +69,7 @@ func Trace() Middleware {
 
 			begin := time.Now()
 			log.Debug(
-				">>> incoming request",
+				">>> incoming HTTP request",
 				slog.Time("time", begin.UTC()),
 			)
 
