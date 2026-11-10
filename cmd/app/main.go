@@ -12,6 +12,9 @@ import (
 	"github.com/nseve/music-catalog/internal/core/logger"
 	"github.com/nseve/music-catalog/internal/core/transport/middleware"
 	"github.com/nseve/music-catalog/internal/core/transport/server"
+	genre_repository "github.com/nseve/music-catalog/internal/features/genre/repository"
+	genre_service "github.com/nseve/music-catalog/internal/features/genre/service"
+	genre_transport "github.com/nseve/music-catalog/internal/features/genre/transport"
 )
 
 func main() {
@@ -37,6 +40,11 @@ func main() {
 	}
 	defer pool.Close()
 
+	log.Info("initializing feature", slog.String("feature", "genre"))
+	genreRepository := genre_repository.New(pool)
+	genreService := genre_service.New(genreRepository)
+	genreHandler := genre_transport.New(genreService)
+
 	srv := server.New(
 		server.NewConfigMust(),
 		log,
@@ -47,6 +55,7 @@ func main() {
 	)
 
 	v1 := server.NewAPIVersionRouter(server.ApiVersion1)
+	v1.RegisterRoutes(genreHandler.Routes()...)
 	srv.RegisterAPIRouters(v1)
 
 	if err := srv.Run(ctx); err != nil {
