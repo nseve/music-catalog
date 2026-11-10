@@ -26,12 +26,13 @@ func (h *ResponseHandler) PanicResponse(p any, msg string) {
 	err := fmt.Errorf("unexpected panic: %v", p)
 
 	h.log.Error(msg, slog.Any("panic", err))
-	response := map[string]string{
-		"message": msg,
-		"error":   err.Error(),
+
+	body := ErrorResponse{
+		Message: msg,
+		Error:   err.Error(),
 	}
 
-	h.JSONResponse(response, http.StatusInternalServerError)
+	h.JSONResponse(body, http.StatusInternalServerError)
 }
 
 func (h *ResponseHandler) JSONResponse(body any, statusCode int) {
@@ -66,9 +67,9 @@ func (h *ResponseHandler) ErrorResponse(err error, msg string) {
 
 	logFunc(msg, slog.Any("error", err))
 
-	body := map[string]string{
-		"message": msg,
-		"error":   err.Error(),
+	body := ErrorResponse{
+		Message: msg,
+		Error:   err.Error(),
 	}
 
 	h.JSONResponse(body, statusCode)
