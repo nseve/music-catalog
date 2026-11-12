@@ -59,7 +59,7 @@ func (h *ResponseHandler) ErrorResponse(err error, msg string) {
 		logFunc = h.log.Debug
 	case errors.Is(err, errs.ErrConflict):
 		statusCode = http.StatusConflict
-		logFunc = h.log.Warn
+		logFunc = h.log.Debug
 	default:
 		statusCode = http.StatusInternalServerError
 		logFunc = h.log.Error
