@@ -47,7 +47,7 @@ func main() {
 
 	log.Info("initializing feature", slog.String("feature", "genre"))
 	genreRepository := genre_repository.New(pool)
-	genreService := genre_service.New(genreRepository)
+	genreService := genre_service.New(genreRepository, txManager)
 	genreHandler := genre_transport.New(genreService)
 
 	log.Info("initializing feature", slog.String("feature", "artist"))
