@@ -1,4 +1,4 @@
-package genre_repository
+package repository
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Genre, error) {
 		ORDER BY id ASC;
 	`
 
-	rows, err := r.pool.Query(queryCtx, sqlQuery)
+	rows, err := r.pool.Querier(ctx).Query(queryCtx, sqlQuery)
 	if err != nil {
 		return nil, fmt.Errorf("pool query: %w", err)
 	}
@@ -59,21 +59,32 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Genre, error) {
 }
 
 func (r *Repository) GetByID(ctx context.Context, id int) (domain.Genre, error) {
+	return r.getByID(ctx, id, false)
+}
+
+func (r *Repository) GetByIDForUpdate(ctx context.Context, id int) (domain.Genre, error) {
+	return r.getByID(ctx, id, true)
+}
+
+func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domain.Genre, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
 	sqlQuery := `
 		SELECT id, name
 		FROM mc.genre
-		WHERE id = $1;
+		WHERE id = $1
 	`
+	if forUpdate {
+		sqlQuery += ` FOR UPDATE`
+	}
 
-	row := r.pool.QueryRow(queryCtx, sqlQuery, id)
+	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, id)
 
 	var genreModel GenreModel
 	if err := row.Scan(&genreModel.ID, &genreModel.Name); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Genre{}, fmt.Errorf("genre with id: %d does not exist: %w", id, errs.ErrNotFound)
+			return domain.Genre{}, fmt.Errorf("genre with id: %d: %w", id, errs.ErrNotFound)
 		}
 		return domain.Genre{}, fmt.Errorf("scan row: %w", err)
 	}
@@ -91,7 +102,7 @@ func (r *Repository) Create(ctx context.Context, genre domain.Genre) (domain.Gen
 		RETURNING id, name;
 	`
 
-	row := r.pool.QueryRow(queryCtx, sqlQuery, genre.Name)
+	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, genre.Name)
 
 	var genreModel GenreModel
 	if err := row.Scan(&genreModel.ID, &genreModel.Name); err != nil {
@@ -105,7 +116,7 @@ func (r *Repository) Create(ctx context.Context, genre domain.Genre) (domain.Gen
 	return genreModel.ToDomain(), nil
 }
 
-func (r *Repository) Update(ctx context.Context, genre domain.Genre) (domain.Genre, error) {
+func (r *Repository) Update(ctx context.Context, id int, genre domain.Genre) (domain.Genre, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
@@ -116,13 +127,10 @@ func (r *Repository) Update(ctx context.Context, genre domain.Genre) (domain.Gen
 		RETURNING id, name;
 	`
 
-	row := r.pool.QueryRow(queryCtx, sqlQuery, genre.Name, genre.ID)
+	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, genre.Name, genre.ID)
 
 	var genreModel GenreModel
 	if err := row.Scan(&genreModel.ID, &genreModel.Name); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Genre{}, fmt.Errorf("genre with id: %d does not exist: %w", genre.ID, errs.ErrNotFound)
-		}
 		return domain.Genre{}, fmt.Errorf("scan row: %w", err)
 	}
 
@@ -138,7 +146,7 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 		WHERE id = $1;
 	`
 
-	cmdTag, err := r.pool.Exec(queryCtx, sqlQuery, id)
+	cmdTag, err := r.pool.Querier(ctx).Exec(queryCtx, sqlQuery, id)
 	if err != nil {
 		return fmt.Errorf("pool exec: %w", err)
 	}

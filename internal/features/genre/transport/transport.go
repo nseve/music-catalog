@@ -1,4 +1,4 @@
-package genre_transport
+package transport
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	"github.com/nseve/music-catalog/internal/core/transport/request"
 	"github.com/nseve/music-catalog/internal/core/transport/response"
 	"github.com/nseve/music-catalog/internal/core/transport/server"
-	"github.com/nseve/music-catalog/internal/core/utils"
+	"github.com/nseve/music-catalog/internal/core/transport/utils"
 )
 
 type GenreService interface {
 	GetAll(ctx context.Context) ([]domain.Genre, error)
 	GetByID(ctx context.Context, id int) (domain.Genre, error)
 	Create(ctx context.Context, genre domain.Genre) (domain.Genre, error)
-	Update(ctx context.Context, genre domain.Genre) (domain.Genre, error)
+	Update(ctx context.Context, id int, patch domain.GenrePatch) (domain.Genre, error)
 	Delete(ctx context.Context, id int) error
 }
 
@@ -31,10 +31,11 @@ func New(genreService GenreService) *Handler {
 }
 
 func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
-	log := logger.FromContext(r.Context())
+	ctx := r.Context()
+	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
-	genreDomains, err := h.genreService.GetAll(r.Context())
+	genreDomains, err := h.genreService.GetAll(ctx)
 	if err != nil {
 		responseHandler.ErrorResponse(err, "failed to get all genres")
 		return
@@ -52,16 +53,17 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
-	log := logger.FromContext(r.Context())
+	ctx := r.Context()
+	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to convert id to integer")
+		responseHandler.ErrorResponse(err, "failed to get path param value")
 		return
 	}
 
-	genre, err := h.genreService.GetByID(r.Context(), id)
+	genre, err := h.genreService.GetByID(ctx, id)
 	if err != nil {
 		responseHandler.ErrorResponse(err, "failed to get genre by id")
 		return
@@ -74,16 +76,17 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
-	log := logger.FromContext(r.Context())
+	ctx := r.Context()
+	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
-	var req GenreRequest
+	var req CreateGenreRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
 		responseHandler.ErrorResponse(err, "failed to decode request")
 		return
 	}
 
-	created, err := h.genreService.Create(r.Context(), req.ToDomain())
+	created, err := h.genreService.Create(ctx, req.ToDomain())
 	if err != nil {
 		responseHandler.ErrorResponse(err, "failed to create genre")
 		return
@@ -96,25 +99,23 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	log := logger.FromContext(r.Context())
+	ctx := r.Context()
+	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to convert id to integer")
+		responseHandler.ErrorResponse(err, "failed to get path param value")
 		return
 	}
 
-	var req GenreRequest
+	var req PatchGenreRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
 		responseHandler.ErrorResponse(err, "failed to decode request")
 		return
 	}
 
-	genreDomain := req.ToDomain()
-	genreDomain.ID = id
-
-	updated, err := h.genreService.Update(r.Context(), genreDomain)
+	updated, err := h.genreService.Update(ctx, id, req.ToDomain())
 	if err != nil {
 		responseHandler.ErrorResponse(err, "failed to update genre")
 		return
@@ -127,16 +128,17 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	log := logger.FromContext(r.Context())
+	ctx := r.Context()
+	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to convert id to integer")
+		responseHandler.ErrorResponse(err, "failed to get path param value")
 		return
 	}
 
-	if err := h.genreService.Delete(r.Context(), id); err != nil {
+	if err := h.genreService.Delete(ctx, id); err != nil {
 		responseHandler.ErrorResponse(err, "failed to delete genre")
 		return
 	}
@@ -148,27 +150,27 @@ func (h *Handler) Routes() []server.Route {
 	return []server.Route{
 		{
 			Method:  http.MethodGet,
-			Path:    "/genre",
+			Path:    "/genres",
 			Handler: h.GetAll,
 		},
 		{
 			Method:  http.MethodGet,
-			Path:    "/genre/{id}",
+			Path:    "/genres/{id}",
 			Handler: h.GetByID,
 		},
 		{
 			Method:  http.MethodPost,
-			Path:    "/genre",
+			Path:    "/genres",
 			Handler: h.Create,
 		},
 		{
 			Method:  http.MethodPatch,
-			Path:    "/genre/{id}",
+			Path:    "/genres/{id}",
 			Handler: h.Update,
 		},
 		{
 			Method:  http.MethodDelete,
-			Path:    "/genre/{id}",
+			Path:    "/genres/{id}",
 			Handler: h.Delete,
 		},
 	}

@@ -1,4 +1,4 @@
-package genre_service
+package service
 
 import (
 	"context"
@@ -10,18 +10,25 @@ import (
 type GenreRepository interface {
 	GetAll(ctx context.Context) ([]domain.Genre, error)
 	GetByID(ctx context.Context, id int) (domain.Genre, error)
+	GetByIDForUpdate(ctx context.Context, id int) (domain.Genre, error)
 	Create(ctx context.Context, genre domain.Genre) (domain.Genre, error)
-	Update(ctx context.Context, genre domain.Genre) (domain.Genre, error)
+	Update(ctx context.Context, id int, genre domain.Genre) (domain.Genre, error)
 	Delete(ctx context.Context, id int) error
+}
+
+type TxManager interface {
+	WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
 type Service struct {
 	genreRepository GenreRepository
+	txManager       TxManager
 }
 
-func New(genreRepository GenreRepository) *Service {
+func New(genreRepository GenreRepository, txManager TxManager) *Service {
 	return &Service{
 		genreRepository: genreRepository,
+		txManager:       txManager,
 	}
 }
 
@@ -56,14 +63,28 @@ func (s *Service) Create(ctx context.Context, genre domain.Genre) (domain.Genre,
 	return created, nil
 }
 
-func (s *Service) Update(ctx context.Context, genre domain.Genre) (domain.Genre, error) {
-	if err := genre.Validate(); err != nil {
-		return domain.Genre{}, fmt.Errorf("validate genre: %w", err)
-	}
+func (s *Service) Update(ctx context.Context, id int, patch domain.GenrePatch) (domain.Genre, error) {
+	var updated domain.Genre
 
-	updated, err := s.genreRepository.Update(ctx, genre)
+	err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+		genre, err := s.genreRepository.GetByIDForUpdate(ctx, id)
+		if err != nil {
+			return fmt.Errorf("get genre by id: %w", err)
+		}
+
+		if err := genre.ApplyPatch(patch); err != nil {
+			return fmt.Errorf("apply genre patch: %w", err)
+		}
+
+		updated, err = s.genreRepository.Update(ctx, id, genre)
+		if err != nil {
+			return fmt.Errorf("update genre: %w", err)
+		}
+
+		return nil
+	})
 	if err != nil {
-		return domain.Genre{}, fmt.Errorf("update genre: %w", err)
+		return domain.Genre{}, err
 	}
 
 	return updated, nil

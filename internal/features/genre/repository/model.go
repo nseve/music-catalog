@@ -1,4 +1,4 @@
-package genre_repository
+package repository
 
 import "github.com/nseve/music-catalog/internal/core/domain"
 
