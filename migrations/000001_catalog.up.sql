@@ -15,11 +15,11 @@ CREATE TABLE mc.album (
     id              SERIAL          PRIMARY KEY,
     artist_id       INTEGER         NOT NULL REFERENCES mc.artist(id) ON DELETE RESTRICT,
     title           VARCHAR(255)    NOT NULL,
-    album_type      VARCHAR(20)     NOT NULL DEFAULT 'album',
+    type            VARCHAR(20)     NOT NULL DEFAULT 'album',
     release_date    DATE            NOT NULL,
     cover_path      VARCHAR(255),
 
-    CONSTRAINT album_type_check CHECK (album_type IN ('album', 'single', 'ep', 'compilation'))
+    CONSTRAINT album_type_check CHECK (type IN ('album', 'single', 'ep', 'compilation'))
 );
 
 CREATE TABLE mc.track (
