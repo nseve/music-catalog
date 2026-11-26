@@ -10,8 +10,12 @@ import (
 
 	"github.com/nseve/music-catalog/internal/core/db"
 	"github.com/nseve/music-catalog/internal/core/logger"
+	"github.com/nseve/music-catalog/internal/core/storage"
 	"github.com/nseve/music-catalog/internal/core/transport/middleware"
 	"github.com/nseve/music-catalog/internal/core/transport/server"
+	album_repository "github.com/nseve/music-catalog/internal/features/album/repository"
+	album_service "github.com/nseve/music-catalog/internal/features/album/service"
+	album_transport "github.com/nseve/music-catalog/internal/features/album/transport"
 	artist_repository "github.com/nseve/music-catalog/internal/features/artist/repository"
 	artist_service "github.com/nseve/music-catalog/internal/features/artist/service"
 	artist_transport "github.com/nseve/music-catalog/internal/features/artist/transport"
@@ -45,6 +49,13 @@ func main() {
 
 	txManager := db.NewTransactor(pool)
 
+	coverStorage, err := storage.NewLocal(storage.NewConfigMust().Dir, log)
+	if err != nil {
+		log.Error("failed to init cover storage", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer coverStorage.Close()
+
 	log.Info("initializing feature", slog.String("feature", "genre"))
 	genreRepository := genre_repository.New(pool)
 	genreService := genre_service.New(genreRepository, txManager)
@@ -54,6 +65,11 @@ func main() {
 	artistRepository := artist_repository.New(pool)
 	artistService := artist_service.New(artistRepository, txManager)
 	artistHandler := artist_transport.New(artistService)
+
+	log.Info("initializing feature", slog.String("feature", "album"))
+	albumRepository := album_repository.New(pool)
+	albumService := album_service.New(albumRepository, txManager, coverStorage)
+	albumHandler := album_transport.New(albumService)
 
 	srv := server.New(
 		server.NewConfigMust(),
@@ -67,6 +83,7 @@ func main() {
 	v1 := server.NewAPIVersionRouter(server.ApiVersion1)
 	v1.RegisterRoutes(genreHandler.Routes()...)
 	v1.RegisterRoutes(artistHandler.Routes()...)
+	v1.RegisterRoutes(albumHandler.Routes()...)
 
 	srv.RegisterAPIRouters(v1)
 

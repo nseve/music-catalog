@@ -22,6 +22,8 @@ func NewConfig() (Config, error) {
 		return Config{}, fmt.Errorf("process envconfig: %w", err)
 	}
 
+	fmt.Println(config)
+
 	return config, nil
 }
 

@@ -35,3 +35,13 @@ func (n *Nullable[T]) ToDomain() domain.Nullable[T] {
 		Set:   n.Set,
 	}
 }
+
+func MapNullable[T, U any](n domain.Nullable[T], f func(T) U) domain.Nullable[U] {
+	out := domain.Nullable[U]{Set: n.Set}
+	if n.Value != nil {
+		v := f(*n.Value)
+		out.Value = &v
+	}
+
+	return out
+}
