@@ -17,7 +17,7 @@ CREATE TABLE mc.album (
     title           VARCHAR(255)    NOT NULL,
     type            VARCHAR(20)     NOT NULL DEFAULT 'album',
     release_date    DATE            NOT NULL,
-    cover_path      VARCHAR(255),
+    cover_key       VARCHAR(255),
 
     CONSTRAINT album_type_check CHECK (type IN ('album', 'single', 'ep', 'compilation'))
 );

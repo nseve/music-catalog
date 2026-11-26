@@ -27,7 +27,7 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Album, error) {
 	defer cancel()
 
 	sqlQuery := `
-		SELECT id, artist_id, title, type, release_date, cover_path
+		SELECT id, artist_id, title, type, release_date, cover_key
 		FROM mc.album
 		ORDER BY id ASC;
 	`
@@ -46,7 +46,7 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Album, error) {
 			&albumModel.Title,
 			&albumModel.Type,
 			&albumModel.ReleaseDate,
-			&albumModel.CoverPath,
+			&albumModel.CoverKey,
 		); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
@@ -74,7 +74,7 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 	defer cancel()
 
 	sqlQuery := `
-		SELECT id, artist_id, title, type, release_date, cover_path
+		SELECT id, artist_id, title, type, release_date, cover_key
 		FROM mc.album
 		WHERE id = $1
 	`
@@ -91,7 +91,7 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 		&albumModel.Title,
 		&albumModel.Type,
 		&albumModel.ReleaseDate,
-		&albumModel.CoverPath,
+		&albumModel.CoverKey,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.Album{}, fmt.Errorf("album with id: %d: %w", id, errs.ErrNotFound)
@@ -107,9 +107,9 @@ func (r *Repository) Create(ctx context.Context, album domain.Album) (domain.Alb
 	defer cancel()
 
 	sqlQuery := `
-		INSERT INTO mc.album(artist_id, title, type, release_date, cover_path)
+		INSERT INTO mc.album(artist_id, title, type, release_date, cover_key)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, artist_id, title, type, release_date, cover_path;
+		RETURNING id, artist_id, title, type, release_date, cover_key;
 	`
 
 	row := r.pool.Querier(ctx).QueryRow(
@@ -119,7 +119,7 @@ func (r *Repository) Create(ctx context.Context, album domain.Album) (domain.Alb
 		album.Title,
 		album.Type,
 		album.ReleaseDate,
-		album.CoverPath,
+		album.CoverKey,
 	)
 
 	var albumModel AlbumModel
@@ -129,7 +129,7 @@ func (r *Repository) Create(ctx context.Context, album domain.Album) (domain.Alb
 		&albumModel.Title,
 		&albumModel.Type,
 		&albumModel.ReleaseDate,
-		&albumModel.CoverPath,
+		&albumModel.CoverKey,
 	); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == db.CodeForeignKeyViolation {
@@ -151,9 +151,10 @@ func (r *Repository) Update(ctx context.Context, id int, album domain.Album) (do
 			artist_id = $1,
 			title = $2,
 			type = $3,
-			release_date = $4
-		WHERE id = $5
-		RETURNING id, artist_id, title, type, release_date, cover_path;
+			release_date = $4,
+			cover_key = $5
+		WHERE id = $6
+		RETURNING id, artist_id, title, type, release_date, cover_key;
 	`
 
 	row := r.pool.Querier(ctx).QueryRow(
@@ -163,6 +164,7 @@ func (r *Repository) Update(ctx context.Context, id int, album domain.Album) (do
 		album.Title,
 		album.Type,
 		album.ReleaseDate,
+		album.CoverKey,
 		id,
 	)
 
@@ -173,8 +175,12 @@ func (r *Repository) Update(ctx context.Context, id int, album domain.Album) (do
 		&albumModel.Title,
 		&albumModel.Type,
 		&albumModel.ReleaseDate,
-		&albumModel.CoverPath,
+		&albumModel.CoverKey,
 	); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == db.CodeForeignKeyViolation {
+			return domain.Album{}, fmt.Errorf("artist with id: %d: %w", album.ArtistID, errs.ErrNotFound)
+		}
 		return domain.Album{}, fmt.Errorf("scan row: %w", err)
 	}
 

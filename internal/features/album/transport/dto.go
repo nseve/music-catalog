@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/nseve/music-catalog/internal/core/domain"
@@ -59,14 +60,22 @@ type AlbumResponse struct {
 	Title       string     `json:"title"`
 	Type        string     `json:"type"`
 	ReleaseDate types.Date `json:"release_date"`
+	CoverURL    *string    `json:"cover_url"`
 }
 
 func ResponseFromDomain(album domain.Album) AlbumResponse {
+	var coverURL *string
+	if album.CoverKey != nil {
+		u := fmt.Sprintf("/api/v1/albums/%d/cover", album.ID)
+		coverURL = &u
+	}
+
 	return AlbumResponse{
 		ID:          album.ID,
 		ArtistID:    album.ArtistID,
 		Title:       album.Title,
 		Type:        string(album.Type),
 		ReleaseDate: types.Date{Time: album.ReleaseDate},
+		CoverURL:    coverURL,
 	}
 }

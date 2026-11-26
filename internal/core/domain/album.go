@@ -32,7 +32,7 @@ type Album struct {
 	Title       string
 	Type        AlbumType
 	ReleaseDate time.Time
-	CoverPath   *string
+	CoverKey    *string
 }
 
 func NewAlbum(
@@ -41,7 +41,7 @@ func NewAlbum(
 	title string,
 	albumType AlbumType,
 	releaseDate time.Time,
-	coverPath *string,
+	coverKey *string,
 ) Album {
 	albumType = AlbumType(strings.ToLower(string(albumType)))
 	return Album{
@@ -50,7 +50,7 @@ func NewAlbum(
 		Title:       title,
 		Type:        albumType,
 		ReleaseDate: releaseDate,
-		CoverPath:   coverPath,
+		CoverKey:    coverKey,
 	}
 }
 

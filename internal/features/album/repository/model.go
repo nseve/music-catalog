@@ -12,7 +12,7 @@ type AlbumModel struct {
 	Title       string
 	Type        string
 	ReleaseDate time.Time
-	CoverPath   *string
+	CoverKey    *string
 }
 
 func (m *AlbumModel) ToDomain() domain.Album {
@@ -22,6 +22,6 @@ func (m *AlbumModel) ToDomain() domain.Album {
 		m.Title,
 		domain.AlbumType(m.Type),
 		m.ReleaseDate,
-		m.CoverPath,
+		m.CoverKey,
 	)
 }
