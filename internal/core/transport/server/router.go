@@ -13,13 +13,13 @@ const (
 
 type APIVersionRouter struct {
 	*http.ServeMux
-	apiVesion ApiVersion
+	apiVersion ApiVersion
 }
 
 func NewAPIVersionRouter(apiVersion ApiVersion) *APIVersionRouter {
 	return &APIVersionRouter{
-		ServeMux:  http.NewServeMux(),
-		apiVesion: apiVersion,
+		ServeMux:   http.NewServeMux(),
+		apiVersion: apiVersion,
 	}
 }
 

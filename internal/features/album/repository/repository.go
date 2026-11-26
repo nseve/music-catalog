@@ -22,20 +22,33 @@ func New(pool *db.Pool) *Repository {
 	}
 }
 
-func (r *Repository) GetAll(ctx context.Context) ([]domain.Album, error) {
+func (r *Repository) List(ctx context.Context, artistID *int, limit *int, offset *int) ([]domain.Album, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
 	sqlQuery := `
 		SELECT id, artist_id, title, type, release_date, cover_key
 		FROM mc.album
-		ORDER BY id ASC;
+		%s
+		ORDER BY id ASC
+		LIMIT $1
+		OFFSET $2;
 	`
 
-	rows, err := r.pool.Querier(ctx).Query(queryCtx, sqlQuery)
+	args := []any{limit, offset}
+
+	if artistID != nil {
+		sqlQuery = fmt.Sprintf(sqlQuery, "WHERE artist_id = $3")
+		args = append(args, artistID)
+	} else {
+		sqlQuery = fmt.Sprintf(sqlQuery, "")
+	}
+
+	rows, err := r.pool.Querier(ctx).Query(queryCtx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("pool query: %w", err)
 	}
+	defer rows.Close()
 
 	var albumModels []AlbumModel
 	for rows.Next() {
@@ -51,6 +64,10 @@ func (r *Repository) GetAll(ctx context.Context) ([]domain.Album, error) {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}
 		albumModels = append(albumModels, albumModel)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows err: %w", err)
 	}
 
 	albumDomains := make([]domain.Album, 0, len(albumModels))
@@ -77,9 +94,13 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 		SELECT id, artist_id, title, type, release_date, cover_key
 		FROM mc.album
 		WHERE id = $1
+		%s;
 	`
+
 	if forUpdate {
-		sqlQuery += ` FOR UPDATE`
+		sqlQuery = fmt.Sprintf(sqlQuery, "FOR UPDATE")
+	} else {
+		sqlQuery = fmt.Sprintf(sqlQuery, "")
 	}
 
 	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, id)
@@ -94,7 +115,11 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 		&albumModel.CoverKey,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Album{}, fmt.Errorf("album with id: %d: %w", id, errs.ErrNotFound)
+			return domain.Album{}, fmt.Errorf(
+				"album with id: %d: %w",
+				id,
+				errs.ErrNotFound,
+			)
 		}
 		return domain.Album{}, fmt.Errorf("scan row: %w", err)
 	}
@@ -133,7 +158,11 @@ func (r *Repository) Create(ctx context.Context, album domain.Album) (domain.Alb
 	); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == db.CodeForeignKeyViolation {
-			return domain.Album{}, fmt.Errorf("artist with id: %d: %w", album.ArtistID, errs.ErrNotFound)
+			return domain.Album{}, fmt.Errorf(
+				"artist with id: %d: does not exist: %w",
+				album.ArtistID,
+				errs.ErrUnprocessableEntity,
+			)
 		}
 		return domain.Album{}, fmt.Errorf("scan row: %w", err)
 	}
@@ -179,7 +208,11 @@ func (r *Repository) Update(ctx context.Context, id int, album domain.Album) (do
 	); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == db.CodeForeignKeyViolation {
-			return domain.Album{}, fmt.Errorf("artist with id: %d: %w", album.ArtistID, errs.ErrNotFound)
+			return domain.Album{}, fmt.Errorf(
+				"artist with id: %d: does not exist: %w",
+				album.ArtistID,
+				errs.ErrUnprocessableEntity,
+			)
 		}
 		return domain.Album{}, fmt.Errorf("scan row: %w", err)
 	}
@@ -187,22 +220,29 @@ func (r *Repository) Update(ctx context.Context, id int, album domain.Album) (do
 	return albumModel.ToDomain(), nil
 }
 
-func (r *Repository) Delete(ctx context.Context, id int) error {
+func (r *Repository) Delete(ctx context.Context, id int) (*string, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
 	sqlQuery := `
 		DELETE FROM mc.album
-		WHERE id = $1;
+		WHERE id = $1
+		RETURNING cover_key;
 	`
 
-	cmdTag, err := r.pool.Querier(ctx).Exec(queryCtx, sqlQuery, id)
-	if err != nil {
-		return fmt.Errorf("pool exec: %w", err)
-	}
-	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("album with id: %d: %w", id, errs.ErrNotFound)
+	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, id)
+
+	var coverKey *string
+	if err := row.Scan(&coverKey); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf(
+				"album with id: %d: %w",
+				id,
+				errs.ErrNotFound,
+			)
+		}
+		return nil, fmt.Errorf("scan row: %w", err)
 	}
 
-	return nil
+	return coverKey, nil
 }

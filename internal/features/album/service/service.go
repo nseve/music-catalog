@@ -15,12 +15,12 @@ import (
 )
 
 type AlbumRepository interface {
-	GetAll(ctx context.Context) ([]domain.Album, error)
+	List(ctx context.Context, artistID *int, limit *int, offset *int) ([]domain.Album, error)
 	GetByID(ctx context.Context, id int) (domain.Album, error)
 	GetByIDForUpdate(ctx context.Context, id int) (domain.Album, error)
 	Create(ctx context.Context, album domain.Album) (domain.Album, error)
 	Update(ctx context.Context, id int, album domain.Album) (domain.Album, error)
-	Delete(ctx context.Context, id int) error
+	Delete(ctx context.Context, id int) (*string, error)
 }
 
 type TxManager interface {
@@ -47,10 +47,18 @@ func New(albumRepository AlbumRepository, txManager TxManager, coverStorage Cove
 	}
 }
 
-func (s *Service) GetAll(ctx context.Context) ([]domain.Album, error) {
-	albums, err := s.albumRepository.GetAll(ctx)
+func (s *Service) List(ctx context.Context, artistID *int, limit *int, offset *int) ([]domain.Album, error) {
+	if limit != nil && *limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative: %w", errs.ErrInvalidArgument)
+	}
+
+	if offset != nil && *offset < 0 {
+		return nil, fmt.Errorf("offset must be non-negative: %w", errs.ErrInvalidArgument)
+	}
+
+	albums, err := s.albumRepository.List(ctx, artistID, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("get all albums: %w", err)
+		return nil, fmt.Errorf("get albums: %w", err)
 	}
 
 	return albums, nil
@@ -105,17 +113,13 @@ func (s *Service) Update(ctx context.Context, id int, patch domain.AlbumPatch) (
 }
 
 func (s *Service) Delete(ctx context.Context, id int) error {
-	album, err := s.albumRepository.GetByID(ctx, id)
+	coverKey, err := s.albumRepository.Delete(ctx, id)
 	if err != nil {
-		return fmt.Errorf("get album by id: %w", err)
-	}
-
-	if err := s.albumRepository.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete album: %w", err)
 	}
 
-	if album.CoverKey != nil {
-		s.coverStorage.Discard(*album.CoverKey)
+	if coverKey != nil {
+		s.coverStorage.Discard(*coverKey)
 	}
 
 	return nil
@@ -152,7 +156,6 @@ func (s *Service) SetCover(ctx context.Context, id int, src io.Reader) (domain.A
 		oldCover = album.CoverKey
 
 		album.CoverKey = &key
-		fmt.Println("album before update:", album)
 		updated, err = s.albumRepository.Update(ctx, id, album)
 		if err != nil {
 			return fmt.Errorf("update cover key: %w", err)

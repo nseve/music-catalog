@@ -71,6 +71,10 @@ func NewAlbumUninitialized(
 }
 
 func (a *Album) Validate() error {
+	if a.ArtistID <= 0 {
+		return fmt.Errorf("invalid artist_id: %d: %w", a.ArtistID, errs.ErrInvalidArgument)
+	}
+
 	title := strings.TrimSpace(a.Title)
 	titleLen := utf8.RuneCountInString(title)
 	if titleLen < 1 || titleLen > 255 {
@@ -79,6 +83,10 @@ func (a *Album) Validate() error {
 
 	if !a.Type.IsValid() {
 		return fmt.Errorf("invalid album type: %s: %w", a.Type, errs.ErrInvalidArgument)
+	}
+
+	if a.ReleaseDate.IsZero() {
+		return fmt.Errorf("release date is required: %w", errs.ErrInvalidArgument)
 	}
 
 	return nil

@@ -1,3 +1,3 @@
 package domain
 
-var UninitializedID = -1
+const UninitializedID = -1

@@ -30,7 +30,7 @@ func main() {
 
 	log, logFileClose, err := logger.New(logger.NewConfigMust())
 	if err != nil {
-		fmt.Println("create logger: %w", err)
+		fmt.Println("create logger:", err)
 		os.Exit(1)
 	}
 	defer func() {

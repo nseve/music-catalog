@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/nseve/music-catalog/internal/core/domain"
+	errs "github.com/nseve/music-catalog/internal/core/errors"
 )
 
 type GenreRepository interface {
-	GetAll(ctx context.Context) ([]domain.Genre, error)
+	List(ctx context.Context, limit *int, offset *int) ([]domain.Genre, error)
 	GetByID(ctx context.Context, id int) (domain.Genre, error)
 	GetByIDForUpdate(ctx context.Context, id int) (domain.Genre, error)
 	Create(ctx context.Context, genre domain.Genre) (domain.Genre, error)
@@ -32,8 +33,16 @@ func New(genreRepository GenreRepository, txManager TxManager) *Service {
 	}
 }
 
-func (s *Service) GetAll(ctx context.Context) ([]domain.Genre, error) {
-	genres, err := s.genreRepository.GetAll(ctx)
+func (s *Service) List(ctx context.Context, limit *int, offset *int) ([]domain.Genre, error) {
+	if limit != nil && *limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative: %w", errs.ErrInvalidArgument)
+	}
+
+	if offset != nil && *offset < 0 {
+		return nil, fmt.Errorf("offset must be non-negative: %w", errs.ErrInvalidArgument)
+	}
+
+	genres, err := s.genreRepository.List(ctx, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("get all genres: %w", err)
 	}

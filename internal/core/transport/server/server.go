@@ -28,7 +28,7 @@ func New(config Config, log *slog.Logger, mws ...middleware.Middleware) *Server 
 
 func (h *Server) RegisterAPIRouters(routers ...*APIVersionRouter) {
 	for _, router := range routers {
-		prefix := "/api/" + string(router.apiVesion)
+		prefix := "/api/" + string(router.apiVersion)
 		h.mux.Handle(prefix+"/", http.StripPrefix(prefix, router))
 	}
 }
