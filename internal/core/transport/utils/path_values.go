@@ -9,9 +9,24 @@ import (
 )
 
 func GetIntPathValue(r *http.Request, key string) (int, error) {
-	val, err := strconv.Atoi(r.PathValue(key))
+	pathValue := r.PathValue(key)
+	if pathValue == "" {
+		return 0, fmt.Errorf(
+			"path parameter %q is missing: %w",
+			key,
+			errs.ErrInvalidArgument,
+		)
+	}
+
+	val, err := strconv.Atoi(pathValue)
 	if err != nil {
-		return 0, fmt.Errorf("failed to convert path value to integer: %v: %w", err, errs.ErrInvalidArgument)
+		return 0, fmt.Errorf(
+			"path parameter %q must be an integer (got %q): %v: %w",
+			key,
+			pathValue,
+			err,
+			errs.ErrInvalidArgument,
+		)
 	}
 
 	return val, nil

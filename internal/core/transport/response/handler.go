@@ -60,6 +60,9 @@ func (h *ResponseHandler) ErrorResponse(err error, msg string) {
 	case errors.Is(err, errs.ErrConflict):
 		statusCode = http.StatusConflict
 		logFunc = h.log.Debug
+	case errors.Is(err, errs.ErrUnprocessableEntity):
+		statusCode = http.StatusUnprocessableEntity
+		logFunc = h.log.Debug
 	default:
 		statusCode = http.StatusInternalServerError
 		logFunc = h.log.Error

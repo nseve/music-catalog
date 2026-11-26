@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -16,7 +15,7 @@ import (
 )
 
 type AlbumService interface {
-	GetAll(ctx context.Context) ([]domain.Album, error)
+	List(ctx context.Context, artistID *int, limit *int, offset *int) ([]domain.Album, error)
 	Create(ctx context.Context, album domain.Album) (domain.Album, error)
 	GetByID(ctx context.Context, id int) (domain.Album, error)
 	Update(ctx context.Context, id int, patch domain.AlbumPatch) (domain.Album, error)
@@ -37,14 +36,20 @@ func New(albumService AlbumService) *Handler {
 	}
 }
 
-func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
-	albumDomains, err := h.albumService.GetAll(ctx)
+	queryParams, err := getArtistIDLimitOffsetQueryParams(r)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get all albums")
+		responseHandler.ErrorResponse(err, "failed to get query parameters")
+		return
+	}
+
+	albumDomains, err := h.albumService.List(ctx, queryParams.artistID, queryParams.limit, queryParams.offset)
+	if err != nil {
+		responseHandler.ErrorResponse(err, "failed to list albums")
 		return
 	}
 
@@ -56,6 +61,41 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	responseHandler.JSONResponse(albumResponses, http.StatusOK)
 }
 
+type queryParams struct {
+	artistID *int
+	limit    *int
+	offset   *int
+}
+
+func getArtistIDLimitOffsetQueryParams(r *http.Request) (queryParams, error) {
+	const (
+		artistIDQueryParamKey = "artist_id"
+		limitQueryParamKey    = "limit"
+		offsetQueryParamKey   = "offset"
+	)
+
+	artistID, err := utils.GetIntQueryParam(r, artistIDQueryParamKey)
+	if err != nil {
+		return queryParams{}, err
+	}
+
+	limit, err := utils.GetIntQueryParam(r, limitQueryParamKey)
+	if err != nil {
+		return queryParams{}, err
+	}
+
+	offset, err := utils.GetIntQueryParam(r, offsetQueryParamKey)
+	if err != nil {
+		return queryParams{}, err
+	}
+
+	return queryParams{
+		artistID: artistID,
+		limit:    limit,
+		offset:   offset,
+	}, nil
+}
+
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
@@ -63,13 +103,13 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	albumDomain, err := h.albumService.GetByID(ctx, id)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get album by id")
+		responseHandler.ErrorResponse(err, "failed to get album")
 		return
 	}
 
@@ -83,7 +123,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateAlbumRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
 
@@ -103,17 +143,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	var req PatchAlbumRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
-
-	log.Debug("got request", slog.Any("req", req))
 
 	updated, err := h.albumService.Update(ctx, id, req.ToDomain())
 	if err != nil {
@@ -131,7 +169,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -150,7 +188,7 @@ func (h *Handler) SetCover(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -177,7 +215,7 @@ func (h *Handler) GetCover(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -205,7 +243,7 @@ func (h *Handler) DeleteCover(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -222,7 +260,7 @@ func (h *Handler) Routes() []server.Route {
 		{
 			Method:  http.MethodGet,
 			Path:    "/albums",
-			Handler: h.GetAll,
+			Handler: h.List,
 		},
 		{
 			Method:  http.MethodGet,

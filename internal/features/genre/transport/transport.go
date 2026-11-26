@@ -13,7 +13,7 @@ import (
 )
 
 type GenreService interface {
-	GetAll(ctx context.Context) ([]domain.Genre, error)
+	List(ctx context.Context, limit *int, offset *int) ([]domain.Genre, error)
 	GetByID(ctx context.Context, id int) (domain.Genre, error)
 	Create(ctx context.Context, genre domain.Genre) (domain.Genre, error)
 	Update(ctx context.Context, id int, patch domain.GenrePatch) (domain.Genre, error)
@@ -30,14 +30,20 @@ func New(genreService GenreService) *Handler {
 	}
 }
 
-func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
-	genreDomains, err := h.genreService.GetAll(ctx)
+	limit, offset, err := getLimitOffsetQueryParams(r)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get all genres")
+		responseHandler.ErrorResponse(err, "failed to get query parameters")
+		return
+	}
+
+	genreDomains, err := h.genreService.List(ctx, limit, offset)
+	if err != nil {
+		responseHandler.ErrorResponse(err, "failed to list genres")
 		return
 	}
 
@@ -52,6 +58,25 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	responseHandler.JSONResponse(genreResponses, http.StatusOK)
 }
 
+func getLimitOffsetQueryParams(r *http.Request) (*int, *int, error) {
+	const (
+		limitQueryParamKey  = "limit"
+		offsetQueryParamKey = "offset"
+	)
+
+	limit, err := utils.GetIntQueryParam(r, limitQueryParamKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	offset, err := utils.GetIntQueryParam(r, offsetQueryParamKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return limit, offset, nil
+}
+
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
@@ -59,13 +84,13 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	genre, err := h.genreService.GetByID(ctx, id)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get genre by id")
+		responseHandler.ErrorResponse(err, "failed to get genre")
 		return
 	}
 
@@ -82,7 +107,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateGenreRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
 
@@ -105,13 +130,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	var req PatchGenreRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
 
@@ -134,7 +159,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -151,7 +176,7 @@ func (h *Handler) Routes() []server.Route {
 		{
 			Method:  http.MethodGet,
 			Path:    "/genres",
-			Handler: h.GetAll,
+			Handler: h.List,
 		},
 		{
 			Method:  http.MethodGet,

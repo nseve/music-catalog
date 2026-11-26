@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/nseve/music-catalog/internal/core/db"
 	"github.com/nseve/music-catalog/internal/core/domain"
 	errs "github.com/nseve/music-catalog/internal/core/errors"
@@ -21,20 +22,23 @@ func New(pool *db.Pool) *Repository {
 	}
 }
 
-func (r *Repository) GetAll(ctx context.Context) ([]domain.Artist, error) {
+func (r *Repository) List(ctx context.Context, limit *int, offset *int) ([]domain.Artist, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, r.pool.OpTimeout())
 	defer cancel()
 
 	sqlQuery := `
 		SELECT id, name, country
 		FROM mc.artist
-		ORDER BY id ASC;
+		ORDER BY id ASC
+		LIMIT $1
+		OFFSET $2;
 	`
 
-	rows, err := r.pool.Querier(ctx).Query(queryCtx, sqlQuery)
+	rows, err := r.pool.Querier(ctx).Query(queryCtx, sqlQuery, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool query: %w", err)
 	}
+	defer rows.Close()
 
 	var artistModels []ArtistModel
 	for rows.Next() {
@@ -72,9 +76,13 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 		SELECT id, name, country
 		FROM mc.artist
 		WHERE id = $1
+		%s;
 	`
+
 	if forUpdate {
-		sqlQuery += ` FOR UPDATE`
+		sqlQuery = fmt.Sprintf(sqlQuery, "FOR UPDATE")
+	} else {
+		sqlQuery = fmt.Sprintf(sqlQuery, "")
 	}
 
 	row := r.pool.Querier(ctx).QueryRow(queryCtx, sqlQuery, id)
@@ -82,7 +90,11 @@ func (r *Repository) getByID(ctx context.Context, id int, forUpdate bool) (domai
 	var artistModel ArtistModel
 	if err := row.Scan(&artistModel.ID, &artistModel.Name, &artistModel.Country); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return domain.Artist{}, fmt.Errorf("artist with id: %d: %w", id, errs.ErrNotFound)
+			return domain.Artist{}, fmt.Errorf(
+				"artist with id: %d: %w",
+				id,
+				errs.ErrNotFound,
+			)
 		}
 		return domain.Artist{}, fmt.Errorf("scan row: %w", err)
 	}
@@ -144,10 +156,23 @@ func (r *Repository) Delete(ctx context.Context, id int) error {
 
 	cmdTag, err := r.pool.Querier(ctx).Exec(queryCtx, sqlQuery, id)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == db.CodeForeignKeyViolation {
+			return fmt.Errorf(
+				"artist with id: %d has albums and cannot be deleted: %w",
+				id,
+				errs.ErrConflict,
+			)
+		}
+
 		return fmt.Errorf("pool exec: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("artist with id: %d: %w", id, errs.ErrNotFound)
+		return fmt.Errorf(
+			"artist with id: %d: %w",
+			id,
+			errs.ErrNotFound,
+		)
 	}
 
 	return nil

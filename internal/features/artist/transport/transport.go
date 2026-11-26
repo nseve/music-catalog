@@ -13,7 +13,7 @@ import (
 )
 
 type ArtistService interface {
-	GetAll(ctx context.Context) ([]domain.Artist, error)
+	List(ctx context.Context, limit *int, offset *int) ([]domain.Artist, error)
 	GetByID(ctx context.Context, id int) (domain.Artist, error)
 	Create(ctx context.Context, artist domain.Artist) (domain.Artist, error)
 	Update(ctx context.Context, id int, patch domain.ArtistPatch) (domain.Artist, error)
@@ -30,14 +30,20 @@ func New(artistService ArtistService) *Handler {
 	}
 }
 
-func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
 	responseHandler := response.NewResponseHandler(log, w)
 
-	artistDomains, err := h.artistService.GetAll(ctx)
+	limit, offset, err := getLimitOffsetQueryParams(r)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get all artists")
+		responseHandler.ErrorResponse(err, "failed to get query parameters")
+		return
+	}
+
+	artistDomains, err := h.artistService.List(ctx, limit, offset)
+	if err != nil {
+		responseHandler.ErrorResponse(err, "failed to list artists")
 		return
 	}
 
@@ -53,6 +59,25 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	responseHandler.JSONResponse(artistResponses, http.StatusOK)
 }
 
+func getLimitOffsetQueryParams(r *http.Request) (*int, *int, error) {
+	const (
+		limitQueryParamKey  = "limit"
+		offsetQueryParamKey = "offset"
+	)
+
+	limit, err := utils.GetIntQueryParam(r, limitQueryParamKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	offset, err := utils.GetIntQueryParam(r, offsetQueryParamKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return limit, offset, nil
+}
+
 func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	log := logger.FromContext(ctx)
@@ -60,13 +85,13 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	artist, err := h.artistService.GetByID(ctx, id)
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get artist by id")
+		responseHandler.ErrorResponse(err, "failed to get artist")
 		return
 	}
 
@@ -84,7 +109,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req CreateArtistRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
 
@@ -108,13 +133,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
 	var req PatchArtistRequest
 	if err := request.DecodeJSON(r, &req); err != nil {
-		responseHandler.ErrorResponse(err, "failed to decode request")
+		responseHandler.ErrorResponse(err, "failed to decode request body")
 		return
 	}
 
@@ -138,7 +163,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	id, err := utils.GetIntPathValue(r, "id")
 	if err != nil {
-		responseHandler.ErrorResponse(err, "failed to get path param value")
+		responseHandler.ErrorResponse(err, "failed to get path parameter \"id\"")
 		return
 	}
 
@@ -155,7 +180,7 @@ func (h *Handler) Routes() []server.Route {
 		{
 			Method:  http.MethodGet,
 			Path:    "/artists",
-			Handler: h.GetAll,
+			Handler: h.List,
 		},
 		{
 			Method:  http.MethodGet,
